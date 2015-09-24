@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -28,6 +27,7 @@ public class MainActivity extends AppCompatActivity {
     private ListView itemList;
     private ArrayList<BluetoothDevice> listData;
     private BluetoothListAdapter listAdapter;
+    private BluetoothConnection connector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,10 +40,10 @@ public class MainActivity extends AppCompatActivity {
         itemList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View viewClicked, int position, long id) {
-                TextView text = (TextView) viewClicked.findViewById(R.id.device_mac);
-                connectToDevice(text.getText().toString());
+                connectToDevice(((TextView) viewClicked.findViewById(R.id.device_mac)).getText().toString());
             }
         });
+        showBluetoothDevices(null);
     }
 
     @Override
@@ -94,9 +94,12 @@ public class MainActivity extends AppCompatActivity {
      * @param address
      */
     private void connectToDevice(String address) {
-        Log.d("Measurement", address);
         BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
-        new Thread(new BluetoothConnection(device)).start();
+        if (connector != null) {
+            connector.cancel();
+        }
+        connector = new BluetoothConnection(device);
+        new Thread(connector).start();
     }
 
     /**
@@ -128,15 +131,11 @@ public class MainActivity extends AppCompatActivity {
         public void run() {
             // Cancel discovery because it will slow down the connection
             mBluetoothAdapter.cancelDiscovery();
-
             try {
                 // Connect the device through the socket. This will block
                 // until it succeeds or throws an exception
                 mmSocket.connect();
                 giveStatusUpdate(getString(R.string.connection_success));
-                byte[] array = new byte["Hello from the other device!".getBytes().length];
-                mmSocket.getInputStream().read(array);
-                giveStatusUpdate(new String(array, "UTF-8"));
             } catch (IOException connectException) {
                 // Unable to connect; close the socket and get out
                 giveStatusUpdate(getString(R.string.connection_error));
@@ -173,5 +172,4 @@ public class MainActivity extends AppCompatActivity {
             });
         }
     }
-
 }
