@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -13,7 +14,9 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
@@ -23,17 +26,20 @@ import java.util.UUID;
  */
 public class MainActivity extends AppCompatActivity {
 
+    // The bluetoothadapter
     protected BluetoothAdapter mBluetoothAdapter;
-    private ListView itemList;
+    // The bluetooth devices to show in the listview
     private ArrayList<BluetoothDevice> listData;
+    // The ListAdapter
     private BluetoothListAdapter listAdapter;
+    // The bluetooth connection
     private BluetoothConnection connector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        itemList = (ListView) findViewById(R.id.listView);
+        ListView itemList = (ListView) findViewById(R.id.listView);
         listData = new ArrayList<>();
         listAdapter = new BluetoothListAdapter(this, 0, listData);
         itemList.setAdapter(listAdapter);
@@ -43,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
                 connectToDevice(((TextView) viewClicked.findViewById(R.id.device_mac)).getText().toString());
             }
         });
-        showBluetoothDevices(null);
+        refreshBluetoothDevices(null);
     }
 
     @Override
@@ -73,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
      *
      * @param view
      */
-    public void showBluetoothDevices(View view) {
+    public void refreshBluetoothDevices(View view) {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
         listData.clear();
@@ -107,17 +113,20 @@ public class MainActivity extends AppCompatActivity {
      */
     private class BluetoothConnection implements Runnable {
 
+        // Unique identifier necessary for a connection
         private static final String UUID_STRING = "34824060-611f-11e5-a837-0800200c9a66";
+        // The bluetoothsocket
+        private BluetoothSocket mmSocket;
 
-        private final BluetoothSocket mmSocket;
-        private final BluetoothDevice mmDevice;
-
+        /**
+         * Create the BluetoothConnection thread to try and connect with the given device
+         *
+         * @param device
+         */
         public BluetoothConnection(BluetoothDevice device) {
             // Use a temporary object that is later assigned to mmSocket,
             // because mmSocket is final
             BluetoothSocket tmp = null;
-            mmDevice = device;
-
             // Get a BluetoothSocket to connect with the given BluetoothDevice
             try {
                 // MY_UUID is the app's UUID string, also used by the server code
@@ -126,7 +135,6 @@ public class MainActivity extends AppCompatActivity {
             }
             mmSocket = tmp;
         }
-
         @Override
         public void run() {
             // Cancel discovery because it will slow down the connection
@@ -136,27 +144,36 @@ public class MainActivity extends AppCompatActivity {
                 // until it succeeds or throws an exception
                 mmSocket.connect();
                 giveStatusUpdate(getString(R.string.connection_success));
+                readFromDevice();
             } catch (IOException connectException) {
                 // Unable to connect; close the socket and get out
                 giveStatusUpdate(getString(R.string.connection_error));
+                Log.d("BluetoothTest", connectException.getMessage());
                 try {
                     mmSocket.close();
                 } catch (IOException closeException) {
+                    Log.d("BluetoothTest", closeException.getMessage());
                 }
             }
-
-            // Do work to manage the connection (in a separate thread)
-            //manageConnectedSocket(mmSocket);
         }
 
         /**
          * Will cancel an in-progress connection, and close the socket
          */
-        public void cancel() {
+        public synchronized void cancel() {
             try {
                 mmSocket.close();
-            } catch (IOException e) {
+            } catch (Exception e) {
+                Log.d("BluetoothTest", e.getMessage());
             }
+        }
+
+        /**
+         * Read incoming data from the device
+         */
+        private void readFromDevice() throws IOException {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(mmSocket.getInputStream()));
+            giveStatusUpdate(reader.readLine());
         }
 
         /**
